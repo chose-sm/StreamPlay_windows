@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StreamPlay</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>StreamPlay</h1>
+    <p class="sub">Zrkadlenie obrazu a zvuku z PC na TV cez Wi-Fi</p>
+  </header>
+
+  <section id="status" class="status idle" aria-live="polite">
+    <span class="dot"></span><span id="statusText">Vyber TV zo zoznamu</span>
+  </section>
+
+  <section id="audioBox" class="audio" hidden>
+    <span id="audioText">Zvuk z PC</span>
+    <div class="meter"><div id="audioLevel"></div></div>
+  </section>
+
+  <section id="fwBox" class="fw" hidden>
+    <p>Windows pravdepodobne blokuje spojenie z TV. Povoľ ho tlačidlom nižšie (Windows si vypýta potvrdenie správcu), potom skús zrkadlenie znova.</p>
+    <button id="fwAllow" type="button">Povoliť vo firewalle</button>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2>Zariadenia v sieti</h2>
+      <button id="rescan" class="ghost" type="button">Hľadať znova</button>
+    </div>
+    <ul id="devices" class="devices"></ul>
+    <p id="empty" class="empty">Hľadám TV… Uisti sa, že PC aj TV sú v rovnakej sieti a TV má zapnutý Chromecast.</p>
+  </section>
+
+  <section class="options">
+    <label>Obrazovka
+      <select id="source"></select>
+    </label>
+    <label>Kvalita
+      <select id="quality">
+        <option value="8" selected>1080p, vysoká (8 Mb/s)</option>
+        <option value="5">1080p, štandardná (5 Mb/s)</option>
+      </select>
+    </label>
+  </section>
+
+  <button id="stop" class="stop" type="button" hidden>Zastaviť zrkadlenie</button>
+
+  <p class="hint">Obraz a zvuk prídu na TV s oneskorením niekoľko sekúnd, ale budú synchronizované. Zvuk z PC ti ďalej hrá aj z reproduktorov PC, ak ho chceš len na TV, stlm PC.</p>
+
+  <p class="hint">
+    StreamPlay obsahuje ffmpeg (GPL v3), Electron a ďalšie open-source programy.
+    <button id="licenses" class="linkbtn" type="button">Licencie a zdrojový kód</button>
+  </p>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

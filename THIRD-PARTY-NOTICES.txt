@@ -1,0 +1,83 @@
+StreamPlay - third-party software / Softvér tretích strán
+=========================================================
+
+StreamPlay's own source code is licensed under the MIT License (see LICENSE).
+The released installer and portable executable also contain the software
+listed below, each under its own license. The full license texts are in the
+"licenses" folder (next to this file in the installation folder, and in the
+source repository).
+
+Vlastný zdrojový kód StreamPlay je pod licenciou MIT (pozri LICENSE). Hotový
+inštalátor a portable súbor obsahujú aj nižšie uvedený softvér, každý pod
+vlastnou licenciou. Plné znenia licencií sú v priečinku "licenses".
+
+
+1. FFmpeg  -  GNU General Public License v3 (GPL-3.0-or-later)
+---------------------------------------------------------------
+
+StreamPlay contains the program "ffmpeg.exe" (FFmpeg), which it starts as a
+separate process to encode the captured screen and audio. StreamPlay does not
+link to FFmpeg; the two programs communicate only through pipes and files.
+
+  Build:    FFmpeg 6.1.1, static Windows build "essentials_build" from
+            www.gyan.dev (distributed through the npm package ffmpeg-static
+            5.3.0, binary release b6.1.1)
+  License:  GNU General Public License version 3 (full text:
+            licenses/ffmpeg-GPL-3.0.txt)
+  Build information, including the list of libraries compiled into the
+  binary (for example libx264, which is also GPL):
+            licenses/ffmpeg-build-info.txt
+
+Source code of the exact build (as stated by the build's own README):
+  https://github.com/FFmpeg/FFmpeg/commit/e38092ef93
+FFmpeg 6.1.1 release sources:
+  https://ffmpeg.org/releases/
+Build provider and build scripts:
+  https://www.gyan.dev/ffmpeg/builds/
+npm package that distributes the binary:
+  https://github.com/eugeneware/ffmpeg-static
+Other libraries compiled into the binary (for example x264:
+https://code.videolan.org/videolan/x264) are listed in
+licenses/ffmpeg-build-info.txt, and their sources are available from the
+respective projects.
+
+If any of these links stops working, open an issue in the StreamPlay repository
+and the corresponding source will be provided.
+
+You may replace ffmpeg.exe in the installation folder
+(resources\app.asar.unpacked\node_modules\ffmpeg-static\ffmpeg.exe) with your
+own build of FFmpeg.
+
+Zdrojový kód presnej zostavy ffmpeg je na odkazoch vyššie. Ak by niektorý
+odkaz prestal fungovať, založ v repozitári StreamPlay issue a zdroj ti
+poskytnem. ffmpeg.exe v inštalačnom priečinku môžeš nahradiť vlastnou zostavou.
+
+
+2. Electron and Chromium  -  MIT and various open-source licenses
+------------------------------------------------------------------
+
+StreamPlay runs on Electron (https://www.electronjs.org/), which bundles
+Chromium and Node.js.
+
+  Electron license:   LICENSE.electron.txt (in the installation folder)
+  Chromium and its dependencies:  LICENSES.chromium.html (in the
+                      installation folder, lists every component and its
+                      license)
+
+
+3. npm packages
+---------------
+
+The packages listed in licenses/npm-packages.txt (MIT, ISC, BSD and Apache-2.0
+licenses, with full texts). The direct dependencies are:
+  - bonjour-service (MIT), used to find Chromecast devices on the network,
+  - ffmpeg-static (see section 1).
+
+
+4. Trademarks / Ochranné známky
+--------------------------------
+
+"Chromecast", "Google Cast", "Android TV" and "Google TV" are trademarks of
+Google LLC. StreamPlay is an independent project and is not affiliated with,
+endorsed by or sponsored by Google. It talks to devices that support Google
+Cast over the local network.
