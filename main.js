@@ -6,8 +6,11 @@ const { Discovery } = require('./src/discovery');
 const { Streamer } = require('./src/streamer');
 const { CastSession } = require('./src/cast');
 
-// Zachytávanie nesmie spomaliť Chromium, keď je okno prekryté alebo minimalizované
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// Zachytávanie nesmie spomaliť Chromium, keď je okno prekryté alebo minimalizované.
+// AllowWgcScreenCapturer: zachytávanie cez Windows Graphics Capture pri videu na celú obrazovku
+// dostáva len ~14 snímok/s, preto používame DXGI Desktop Duplication. Prepínač --wgc ho vráti.
+const useWgc = process.argv.includes('--wgc');
+app.commandLine.appendSwitch('disable-features', ['CalculateNativeWinOcclusion', ...(useWgc ? [] : ['AllowWgcScreenCapturer'])].join(','));
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 
@@ -100,7 +103,7 @@ app.whenReady().then(() => {
       .forEach((f) => fs.rmSync(path.join(archive, f), { force: true }));
   } catch {}
   try { fs.writeFileSync(logFile, ''); } catch {}
-  log('start, StreamPlay', app.getVersion(), 'electron', process.versions.electron, 'exe', process.execPath);
+  log('start, StreamPlay', app.getVersion(), 'electron', process.versions.electron, 'exe', process.execPath, 'capture', useWgc ? 'wgc' : 'dxgi');
 
   const ses = session.defaultSession;
 
@@ -155,8 +158,10 @@ ipcMain.handle('stream:start', async (e, opts) => {
   streamer.on('error', (err) => { log('streamer error:', err.message); fail(err.message); });
   streamer.on('log', (text) => log('ffmpeg:', text.trim().replace(/\s+/g, ' ')));
   streamer.on('http', (line) => log('http:', line));
+  streamer.on('stats', (line) => log(line));
   const { url, encoder } = await streamer.start({ targetHost: device.host, height, bitrate, fps });
-  log('stream start', device.name, device.host, encoder, height + 'p' + fps, bitrate + 'Mb/s');
+  log('stream start', device.name, device.host, encoder, height + 'p' + fps, bitrate + 'Mb/s',
+    `hls ${streamer.hlsTime} s ${streamer.segExt}${streamer.markEvent ? ' EVENT' : ''}`);
 
   // renderer už môže začať zachytávať; medzitým pripravíme TV
   (async () => {
@@ -169,7 +174,7 @@ ipcMain.handle('stream:start', async (e, opts) => {
       cast = new CastSession();
       cast.onLog = (m) => log(m);
       cast.onEnded = (reason) => { log('cast ended:', reason); fail(reason); };
-      await cast.play(device, url);
+      await cast.play(device, url, { fmp4: streamer.fmp4 });
       if (!active) return;
       log('cast playing');
 

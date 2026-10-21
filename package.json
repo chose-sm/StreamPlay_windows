@@ -1,14 +1,14 @@
 {
   "name": "streamplay",
   "productName": "StreamPlay",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Mirror your Windows screen and system audio to a Chromecast / Android TV over Wi-Fi",
   "author": "Samuel",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "notices": "node scripts/gen-notices.js",
-    "release": "npm run notices && electron-builder --win nsis portable --x64",
+    "release": "npm run notices && electron-builder --win nsis portable --x64 --publish never",
     "pack": "electron-builder --win dir --x64"
   },
   "license": "MIT",

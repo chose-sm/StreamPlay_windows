@@ -76,8 +76,9 @@ class Streamer extends EventEmitter {
     this.log = '';
   }
 
-  // listSize = koľko segmentov (po hlsTime sekúnd) ostáva v playliste, 300 s = 5 minút
-  async start({ targetHost, height = 1080, fps = 30, bitrate = 6, hlsTime = 1, listSize = 300, event = false }) {
+  // listSize = koľko segmentov (po hlsTime sekúnd) ostáva v playliste, 30 x 2 s = 1 minúta.
+  // TV playlist obnovuje raz za segment, dlhšie segmenty a kratší playlist = menej práce pre TV.
+  async start({ targetHost, height = 1080, fps = 30, bitrate = 6, hlsTime = 2, listSize = 30, event = false }) {
     await this.stop();
     const ffmpeg = resolveFfmpeg();
     const enc = await detectEncoder(ffmpeg);
@@ -86,6 +87,14 @@ class Streamer extends EventEmitter {
     this.dir = fs.mkdtempSync(path.join(os.tmpdir(), HLS_DIR_PREFIX));
     this.log = '';
     this.served = false;
+    this.hlsTime = hlsTime;
+    // na test: STREAMPLAY_HLS_EVENT=0 vypne označenie playlistu ako EVENT
+    this.markEvent = process.env.STREAMPLAY_HLS_EVENT !== '0';
+    // Segmenty fMP4 TV vkladá do prehrávača priamo. MPEG-TS musí najprv prebaliť (v JavaScripte),
+    // čo slabý procesor TV po ~25 min prestal stíhať. STREAMPLAY_HLS_SEGMENT=ts vráti MPEG-TS.
+    this.fmp4 = process.env.STREAMPLAY_HLS_SEGMENT !== 'ts';
+    this.segExt = this.fmp4 ? 'm4s' : 'ts';
+    this._resetStats();
 
     const args = [
       '-hide_banner', '-loglevel', 'info', '-stats_period', '5',
@@ -106,14 +115,18 @@ class Streamer extends EventEmitter {
       ...(event
         ? ['-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'independent_segments+omit_endlist']
         : ['-hls_list_size', String(listSize), '-hls_flags', 'delete_segments+independent_segments+omit_endlist']),
-      '-hls_segment_filename', path.join(this.dir, 'seg_%05d.ts'),
+      ...(this.fmp4 ? ['-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4'] : []),
+      '-hls_segment_filename', path.join(this.dir, `seg_%05d.${this.segExt}`),
       path.join(this.dir, 'index.m3u8'),
     ];
 
-    this.ffmpeg = spawn(ffmpeg, args, { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+    // cwd = priečinok segmentov, inak ffmpeg zapíše init.mp4 (fMP4) do aktuálneho priečinka
+    this.ffmpeg = spawn(ffmpeg, args, { cwd: this.dir, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
     this.ffmpeg.stderr.on('data', (d) => {
       const text = d.toString();
       this.emit('log', text);
+      // posledný segment, ktorý ffmpeg začal zapisovať (predchádzajúci je už hotový)
+      for (const m of text.matchAll(/seg_(\d+)\.(?:ts|m4s)' for writing/g)) this.writingSeg = Number(m[1]);
       // do chybovej hlášky idú len varovania, nie priebeh kódovania
       const important = text.split(/\r?\n|\r/).filter((l) => l && !/^frame=|Opening '|^\[hls/.test(l)).join('\n');
       this.log = (this.log + important + '\n').slice(-1500);
@@ -134,7 +147,7 @@ class Streamer extends EventEmitter {
   // Server počúva len na adrese PC v sieti s TV, vyžaduje náhodný token v URL
   // a obsluhuje výhradne IP adresu TV, takže prúd neuvidí nikto iný v sieti.
   _listen(ip, allowedHost) {
-    const types = { '.m3u8': 'application/x-mpegURL', '.ts': 'video/mp2t' };
+    const types = { '.m3u8': 'application/x-mpegURL', '.ts': 'video/mp2t', '.mp4': 'video/mp4', '.m4s': 'video/mp4' };
     this.server = http.createServer((req, res) => {
       const remote = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
       const parts = (req.url.split('?')[0] || '').split('/').filter(Boolean);
@@ -153,7 +166,8 @@ class Streamer extends EventEmitter {
         this.emit('http', `${remote} GET ${name} -> ${err ? 404 : 200}`);
         if (err) { res.writeHead(404); return res.end(); }
         this.served = true; // TV sa k nám vie pripojiť (firewall ju nezablokoval)
-        if (name.endsWith('.m3u8')) {
+        this._track(name);
+        if (name.endsWith('.m3u8') && this.markEvent) {
           // Playlist označíme ako EVENT: TV potom začne od začiatku a drží si stály odstup od živého okraja.
           // Pri bežnom "živom" playliste sa TV usádza na samom okraji a netrhane prehráva len chvíľu (stále sa načítava).
           data = Buffer.from(data.toString().replace('#EXT-X-VERSION', '#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-VERSION'));
@@ -174,6 +188,38 @@ class Streamer extends EventEmitter {
       };
       tryListen(8765, true);
     });
+  }
+
+  // Meranie, či TV stíha: ako často obnovuje playlist a o koľko segmentov zaostáva
+  // za posledným hotovým segmentom. Súhrn ide do logu raz za minútu.
+  _resetStats() {
+    clearInterval(this.statsTimer);
+    this.writingSeg = -1;
+    this.stats = { lastPlaylist: 0, intervals: [], lags: [] };
+    this.statsTimer = setInterval(() => this._flushStats(), 60000);
+  }
+
+  _track(name) {
+    const now = Date.now();
+    const s = this.stats;
+    if (name.endsWith('.m3u8')) {
+      if (s.lastPlaylist) s.intervals.push(now - s.lastPlaylist);
+      s.lastPlaylist = now;
+      return;
+    }
+    const m = name.match(/^seg_(\d+)\.(?:ts|m4s)$/);
+    if (m && this.writingSeg >= 0) s.lags.push(Math.max(0, this.writingSeg - 1 - Number(m[1])));
+  }
+
+  _flushStats() {
+    const { intervals, lags } = this.stats;
+    if (!intervals.length && !lags.length) return;
+    const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+    const max = (a) => (a.length ? Math.max(...a) : 0);
+    this.emit('stats', `tv: playlist ${intervals.length}/min, interval avg ${Math.round(avg(intervals))} max ${max(intervals)} ms;` +
+      ` segmentov ${lags.length}/min, zaostáva avg ${avg(lags).toFixed(1)} max ${max(lags)} seg (x ${this.hlsTime} s)`);
+    this.stats.intervals = [];
+    this.stats.lags = [];
   }
 
   write(buf) {
@@ -197,6 +243,7 @@ class Streamer extends EventEmitter {
   }
 
   async stop() {
+    clearInterval(this.statsTimer);
     const ff = this.ffmpeg;
     this.ffmpeg = null;
     if (ff) {

@@ -170,7 +170,8 @@ class CastSession {
     }
   }
 
-  async play(device, url) {
+  // fmp4 = segmenty playlistu sú fMP4 (TV to musí vedieť vopred, inak ich číta ako MPEG-TS)
+  async play(device, url, { fmp4 = false } = {}) {
     await new Promise((resolve, reject) => {
       // Zariadenia Cast používajú vlastný (nepodpísaný verejnou CA) certifikát, overenie preto nejde.
       // Pripájame sa len na adresu zo zoznamu nájdených zariadení v lokálnej sieti.
@@ -221,6 +222,7 @@ class CastSession {
         contentId: url,
         contentType: 'application/x-mpegURL',
         streamType: 'LIVE',
+        ...(fmp4 ? { hlsSegmentFormat: 'fmp4', hlsVideoSegmentFormat: 'fmp4' } : {}),
         metadata: { type: 0, metadataType: 0, title: 'Zrkadlenie PC' },
       },
     }, 30000);
